@@ -1,1 +1,8 @@
 _src/
+node_modules/
+dist/
+store/
+data/
+logs/
+.env
+*.db

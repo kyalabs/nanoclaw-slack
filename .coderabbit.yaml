@@ -1,0 +1,148 @@
+# CodeRabbit configuration for kyalabs/nanoclaw-slack
+# Docs: https://docs.coderabbit.ai/guides/configure-coderabbit
+# Schema: https://coderabbit.ai/integrations/schema.v2.json
+
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: en-US
+early_access: false
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  changed_files_summary: true
+  sequence_diagrams: false
+
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+
+  # Skip noise — runtime data, build output, vendored deps, backups.
+  path_filters:
+    - "!dist/**"
+    - "!_src/**"
+    - "!node_modules/**"
+    - "!groups/**"
+    - "!data/**"
+    - "!store/**"
+    - "!logs/**"
+    - "!**/*.bak"
+    - "!**/*.bak.*"
+    - "!nanoclaw.db"
+
+  # Per-area review guidance. Keep these focused and load-bearing —
+  # they prepend to every review prompt for files matching the path.
+  path_instructions:
+    - path: "container/agent-runner/**"
+      instructions: |
+        Container-side runner that executes inside Docker for each agent.
+        Uses the Claude Agent SDK and emits output to the host via
+        OUTPUT_START / OUTPUT_END marker pairs on stdout.
+
+        Review priorities:
+        - Streaming correctness: every assistant text block within a
+          single SDK query iteration must be emitted via writeOutput.
+          Do NOT collapse multiple blocks into a single final emission.
+        - <internal>...</internal> tags are stripped by the host before
+          dispatch — flag any code that relies on them being visible to
+          end users, and any code that puts user-facing content inside
+          them.
+        - Session continuity: newSessionId must propagate through every
+          writeOutput call so the host can resume sessions correctly.
+        - No secrets in logs. The container sees only placeholder
+          credentials; the credential proxy injects real keys at the
+          host boundary. Logging request bodies, env vars, or
+          authorization headers is a security regression.
+        - IPC poll loops must be cancellable and must not leak file
+          descriptors or unhandled rejections.
+
+    - path: "src/channels/**"
+      instructions: |
+        Channel adapters (Slack, etc). Strict review:
+        - No credentials, tokens, or webhook URLs in code or logs.
+        - Slack message body limit is 4000 characters. Long messages
+          must be chunked or sent as files — silent truncation is a bug.
+        - All outbound API calls need timeout + error handling. A
+          channel adapter that hangs blocks the whole agent loop.
+        - Rate limit handling: respect Retry-After headers, don't busy-loop.
+
+    - path: "src/credential-proxy*"
+      instructions: |
+        Security-critical: this proxy injects real API credentials into
+        container-bound traffic. Containers must never see real secrets.
+
+        Review priorities:
+        - Never log Authorization headers, API keys, OAuth tokens,
+          or full request/response bodies that may contain them.
+        - Validate the upstream URL — only allow approved hosts
+          (api.anthropic.com etc). Block egress to arbitrary URLs.
+        - The placeholder-to-real-credential swap must happen on the
+          server side; never echo a placeholder back as if it were real.
+        - Test changes against both api-key and OAuth modes.
+
+    - path: "src/mount-security*"
+      instructions: |
+        Validates additional bind mounts requested by group configs.
+        Review priorities:
+        - Path traversal: reject any path containing ".." or symlinks
+          that escape the allowlist.
+        - Allowlist enforcement is the only defense against agents
+          escaping their sandbox via host-path mounts. Be strict.
+        - Read-only flag must be honored — a writable mount of host
+          source code defeats the entire sandbox model.
+
+    - path: "src/router.ts"
+      instructions: |
+        Routes inbound channel messages to the right group. The
+        <internal>...</internal> stripping logic lives here. Any change
+        to the regex or strip behavior needs explicit reasoning about
+        what gets surfaced to end users vs hidden.
+
+    - path: "src/sender-allowlist*"
+      instructions: |
+        Trigger allowlist for who can wake an agent. Review for:
+        - Default-deny posture preserved.
+        - JID/sender comparison is case-correct and not vulnerable to
+          spoofing (e.g., display-name vs immutable user ID).
+
+    - path: "**/*.test.ts"
+      instructions: |
+        Tests should:
+        - Cover the new behavior, not just exist.
+        - Avoid mocking the system under test.
+        - Not rely on real network or real container spawns — mock the
+          subprocess and SDK iterator.
+
+  # Tools CodeRabbit runs alongside its review.
+  tools:
+    eslint:
+      enabled: true
+    markdownlint:
+      enabled: true
+    gitleaks:
+      enabled: true
+    actionlint:
+      enabled: true
+    biome:
+      enabled: false
+    hadolint:
+      enabled: true
+    languagetool:
+      enabled: false
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  learnings:
+    scope: auto
+  issues:
+    scope: auto
+  pull_requests:
+    scope: auto

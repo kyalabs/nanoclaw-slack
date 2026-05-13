@@ -4,7 +4,12 @@ import fs from 'fs';
 
 import path from 'path';
 
-import { ASSISTANT_NAME, DATA_DIR, SCHEDULER_POLL_INTERVAL, TIMEZONE } from './config.js';
+import {
+  ASSISTANT_NAME,
+  DATA_DIR,
+  SCHEDULER_POLL_INTERVAL,
+  TIMEZONE,
+} from './config.js';
 import {
   ContainerOutput,
   runContainerAgent,
@@ -87,7 +92,9 @@ export interface SchedulerDependencies {
  */
 function isTerminalContainerOutput(output: ContainerOutput): boolean {
   if (output.terminal === false) return false;
-  return !['assistant_text', 'session_update'].includes(output.event_type ?? '');
+  return !['assistant_text', 'session_update'].includes(
+    output.event_type ?? '',
+  );
 }
 
 function reconcileStateDir(groupDir: string): void {
@@ -103,12 +110,17 @@ function reconcileStateDir(groupDir: string): void {
       // Skip directories (like archive/)
       try {
         if (fs.statSync(filePath).isDirectory()) continue;
-      } catch { continue; }
+      } catch {
+        continue;
+      }
 
       // 1. Delete orphaned .tmp files
       if (file.endsWith('.tmp')) {
         fs.unlinkSync(filePath);
-        logger.info({ file, groupDir }, 'Deleted orphaned .tmp file from state');
+        logger.info(
+          { file, groupDir },
+          'Deleted orphaned .tmp file from state',
+        );
         continue;
       }
 
@@ -125,7 +137,9 @@ function reconcileStateDir(groupDir: string): void {
                 'Removed stale state file (archived as complete)',
               );
             }
-          } catch { /* can't parse archive — leave state file alone */ }
+          } catch {
+            /* can't parse archive — leave state file alone */
+          }
         }
       }
     }
@@ -261,7 +275,10 @@ async function runTask(
         // terminal=false, intending the host to forward it. For
         // scheduled tasks we accumulate and post once on terminal
         // (preserves the "one summary per daily task" UX).
-        if (streamedOutput.event_type === 'assistant_text' && streamedOutput.result) {
+        if (
+          streamedOutput.event_type === 'assistant_text' &&
+          streamedOutput.result
+        ) {
           accumulatedAssistantText += streamedOutput.result;
         }
         // Compute the effective post-able result. Prefer the streaming
@@ -269,7 +286,7 @@ async function runTask(
         // protocol). Fall back to the streaming accumulator (the new
         // protocol's only carrier of text — sdk_result.result is null).
         const effectiveResult = terminalOutput
-          ? (streamedOutput.result || accumulatedAssistantText)
+          ? streamedOutput.result || accumulatedAssistantText
           : null;
         if (terminalOutput && effectiveResult) {
           result = effectiveResult;
@@ -287,7 +304,10 @@ async function runTask(
             await deps.sendMessage(task.chat_jid, effectiveResult);
           }
           scheduleClose();
-        } else if (streamedOutput.result && streamedOutput.event_type !== 'assistant_text') {
+        } else if (
+          streamedOutput.result &&
+          streamedOutput.event_type !== 'assistant_text'
+        ) {
           logger.debug(
             { taskId: task.id, eventType: streamedOutput.event_type },
             'Ignoring non-terminal scheduled task output',
@@ -346,19 +366,29 @@ async function runTask(
     // Extract PR URL from IPC result files (if any)
     let prUrlLine = '';
     try {
-      const ipcStateDir = path.join(DATA_DIR, 'groups', task.group_folder, 'state');
-      const prFiles = fs.readdirSync(ipcStateDir)
+      const ipcStateDir = path.join(
+        DATA_DIR,
+        'groups',
+        task.group_folder,
+        'state',
+      );
+      const prFiles = fs
+        .readdirSync(ipcStateDir)
         .filter((f: string) => f.startsWith('git-pr-') && f.endsWith('.json'))
         .sort()
         .reverse();
       for (const f of prFiles) {
-        const data = JSON.parse(fs.readFileSync(path.join(ipcStateDir, f), 'utf-8'));
+        const data = JSON.parse(
+          fs.readFileSync(path.join(ipcStateDir, f), 'utf-8'),
+        );
         if (data.prUrl) {
           prUrlLine = `- PR URL: ${data.prUrl}`;
           break;
         }
       }
-    } catch { /* no IPC state files — normal for non-PR tasks */ }
+    } catch {
+      /* no IPC state files — normal for non-PR tasks */
+    }
 
     const groups = deps.registeredGroups();
     const sourceEntry = Object.entries(groups).find(
@@ -369,18 +399,20 @@ async function runTask(
       const [sourceJid] = sourceEntry;
       const callbackId = `callback-${task.id}-${Date.now()}`;
       const callbackStatus = error ? 'FAILED' : 'SUCCESS';
-      const callbackPrompt = task.callback_prompt || [
-        `Chain task completed. Process this callback:`,
-        ``,
-        `- Completed task ID: ${task.id}`,
-        `- Agent: ${task.group_folder}`,
-        `- Status: ${callbackStatus}`,
-        `- Result: ${resultSummary}`,
-        ...(prUrlLine ? [prUrlLine] : []),
-        ``,
-        `Read the agent's output at /workspace/extra/groups/${task.group_folder}/state/`,
-        `Advance the chain per your CLAUDE.md workflow.`,
-      ].join('\n');
+      const callbackPrompt =
+        task.callback_prompt ||
+        [
+          `Chain task completed. Process this callback:`,
+          ``,
+          `- Completed task ID: ${task.id}`,
+          `- Agent: ${task.group_folder}`,
+          `- Status: ${callbackStatus}`,
+          `- Result: ${resultSummary}`,
+          ...(prUrlLine ? [prUrlLine] : []),
+          ``,
+          `Read the agent's output at /workspace/extra/groups/${task.group_folder}/state/`,
+          `Advance the chain per your CLAUDE.md workflow.`,
+        ].join('\n');
 
       createTask({
         id: callbackId,
@@ -393,7 +425,7 @@ async function runTask(
         next_run: new Date().toISOString(),
         status: 'active',
         created_at: new Date().toISOString(),
-        source_group: null,  // callbacks don't chain further (prevents loops)
+        source_group: null, // callbacks don't chain further (prevents loops)
       });
 
       logger.info(

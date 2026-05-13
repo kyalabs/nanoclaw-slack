@@ -4,5 +4,41 @@ dist/
 store/
 data/
 logs/
+
+# Auto-generated per-agent runtime cache. Source of truth lives in the
+# upstream context dirs and is materialized into groups/<agent>/CONTEXT.md
+# by harness scripts/context-auto-deploy.sh every 15 minutes. Tracking
+# these in git produces large noisy diffs and risks committing stale
+# absolute paths that exist only in cached snapshots.
+groups/*/CONTEXT.md
+
+# Local secrets and credential material. Never commit any of these.
 .env
+.env.*
+*.env.local
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.crt
+*.csr
+*.der
+*.asc
+*.pub
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+.keystore
+.git-credentials
+.aws/
+.gcloud/
+.docker/config.json
+secrets.*
+credentials*
+
+# Other local artifacts
 *.db
+*.bak.[0-9]*
+.start.lock
